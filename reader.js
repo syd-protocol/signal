@@ -6,8 +6,10 @@
 
 // ─── BASE PATH ────────────────────────────────────────────────────────────────
 // Derives the repo root automatically from the script tag's own src attribute.
-// Works on both GitHub Pages (syd-protocol.github.io/signal/) and locally.
-// No hardcoding. No regex path hacking.
+// The browser resolves <script src="reader.js"> to a fully absolute URL like:
+//   https://syd-protocol.github.io/signal/reader.js
+// Stripping "reader.js" gives us the correct base for all asset fetches.
+// This works on both GitHub Pages and locally with no hardcoding.
 
 const BASE_URL = (() => {
   const scripts = document.getElementsByTagName('script');
@@ -47,6 +49,7 @@ function renderMarkdown(markdown) {
     if (prosBuffer.length === 0) return;
     const text = prosBuffer.join('\n').trim();
     if (text) {
+      // Split on double newlines to get paragraphs
       const paras = text.split(/\n{2,}/);
       paras.forEach(para => {
         const trimmed = para.trim();
@@ -54,6 +57,7 @@ function renderMarkdown(markdown) {
         if (trimmed === '---') {
           output.push('<hr>');
         } else if (trimmed.startsWith('*The system') || trimmed.startsWith('*The System')) {
+          // CTA note — strip asterisks and inject the terminal link
           const inner = trimmed.replace(/^\*/, '').replace(/\*$/, '');
           output.push(`<p class="chapter-cta">${escapeHtml(inner).replace(
             'syd-protocol.github.io/terminal',
@@ -70,6 +74,7 @@ function renderMarkdown(markdown) {
   function flushSystem() {
     if (systemBuffer.length === 0) return;
     const content = systemBuffer.join('\n').trim();
+    // Each non-empty line in a system block becomes its own <p> tag
     const lines = content.split('\n').map(l => l.trim()).filter(l => l);
     const inner = lines.map(l => `<p>${escapeHtml(l)}</p>`).join('');
     output.push(`<div class="system-block">${inner}</div>`);
@@ -103,6 +108,7 @@ function renderMarkdown(markdown) {
     i++;
   }
 
+  // Flush any remaining buffers after the loop ends
   if (inSystem) flushSystem();
   else flushProse();
 
@@ -145,6 +151,9 @@ async function fetchChaptersIndex() {
 }
 
 async function fetchChapter(file) {
+  // Build the full absolute URL using BASE_URL so it works on GitHub Pages
+  // and locally without any path guessing. Error message includes the full
+  // attempted URL so it's easy to diagnose in the console if it fails.
   const url = BASE_URL + file;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Could not load ${file} (${res.status} — fetched: ${url})`);
@@ -167,12 +176,14 @@ async function loadArchive() {
     return;
   }
 
+  // Update the entry count in the boot sequence header
   if (countEl) countEl.textContent = chapters.length;
 
   list.innerHTML = '';
   chapters.forEach((ch, idx) => {
     const li = document.createElement('li');
     li.className = 'transmission-entry';
+    // Stagger animation delay so entries reveal sequentially after the boot sequence
     li.style.animationDelay = `${1.9 + idx * 0.2}s`;
 
     li.innerHTML = `
@@ -200,6 +211,7 @@ async function loadReader() {
 
   if (!bodyEl) return;
 
+  // Get requested transmission ID from the URL query string (?id=T-001)
   const params = new URLSearchParams(window.location.search);
   const requestedId = params.get('id');
 
@@ -211,6 +223,7 @@ async function loadReader() {
     return;
   }
 
+  // Find the index of the requested chapter, default to first if not found
   const idx = requestedId
     ? chapters.findIndex(ch => ch.id === requestedId)
     : 0;
@@ -223,10 +236,13 @@ async function loadReader() {
     return;
   }
 
+  // Update browser tab title
   document.title = `SYD / SIGNAL — ${chapter.id}: ${chapter.title}`;
 
+  // Render the header meta (id, date, title)
   if (titleEl) {
     titleEl.innerHTML = escapeHtml(chapter.title) + '<span class="cursor" aria-hidden="true"></span>';
+    // Remove the blinking cursor once the chapter has loaded
     setTimeout(() => {
       const cursor = titleEl.querySelector('.cursor');
       if (cursor) cursor.remove();
@@ -236,6 +252,7 @@ async function loadReader() {
   if (metaId) metaId.textContent = chapter.id;
   if (metaDate) metaDate.textContent = chapter.date;
 
+  // Fetch and render the chapter markdown
   let markdown;
   try {
     markdown = await fetchChapter(chapter.file);
@@ -246,21 +263,25 @@ async function loadReader() {
 
   const html = renderMarkdown(markdown);
 
+  // Brief pause before render — gives the "receiving transmission" feel
   await new Promise(r => setTimeout(r, 400));
 
   bodyEl.classList.add('rendering');
   bodyEl.innerHTML = html;
 
+  // Stagger each content element so they reveal progressively
   const elements = bodyEl.querySelectorAll('p, .system-block, hr');
   elements.forEach((el, i) => {
     el.style.animationDelay = `${i * 80}ms`;
   });
 
+  // Clean up animation classes once the stagger sequence completes
   setTimeout(() => {
     bodyEl.classList.remove('rendering');
     elements.forEach(el => el.style.animationDelay = '');
   }, elements.length * 80 + 600);
 
+  // Wire up prev/next navigation buttons
   const hasPrev = chapterIndex > 0;
   const hasNext = chapterIndex < chapters.length - 1;
 
