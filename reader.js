@@ -4,6 +4,24 @@
  * No framework. No build step.
  */
 
+// ─── BASE PATH ────────────────────────────────────────────────────────────────
+// Derives the repo root automatically from the script tag's own src attribute.
+// Works on both GitHub Pages (syd-protocol.github.io/signal/) and locally.
+// No hardcoding. No regex path hacking.
+
+const BASE_URL = (() => {
+  const scripts = document.getElementsByTagName('script');
+  for (let i = 0; i < scripts.length; i++) {
+    const src = scripts[i].src;
+    if (src && src.includes('reader.js')) {
+      return src.replace('reader.js', '');
+    }
+  }
+  // Fallback: derive from current page location
+  return window.location.href.replace(/\/[^/]*(\?.*)?$/, '/');
+})();
+
+
 // ─── MARKDOWN RENDERER ────────────────────────────────────────────────────────
 
 /**
@@ -29,7 +47,6 @@ function renderMarkdown(markdown) {
     if (prosBuffer.length === 0) return;
     const text = prosBuffer.join('\n').trim();
     if (text) {
-      // Split on double newlines to get paragraphs
       const paras = text.split(/\n{2,}/);
       paras.forEach(para => {
         const trimmed = para.trim();
@@ -37,13 +54,7 @@ function renderMarkdown(markdown) {
         if (trimmed === '---') {
           output.push('<hr>');
         } else if (trimmed.startsWith('*The system') || trimmed.startsWith('*The System')) {
-          // CTA note
           const inner = trimmed.replace(/^\*/, '').replace(/\*$/, '');
-          const linked = inner
-            .replace(
-              'syd-protocol.github.io/terminal',
-              '<a href="https://syd-protocol.github.io/terminal" target="_blank" rel="noopener">syd-protocol.github.io/terminal</a>'
-            );
           output.push(`<p class="chapter-cta">${escapeHtml(inner).replace(
             'syd-protocol.github.io/terminal',
             '<a href="https://syd-protocol.github.io/terminal" target="_blank" rel="noopener">syd-protocol.github.io/terminal</a>'
@@ -92,7 +103,6 @@ function renderMarkdown(markdown) {
     i++;
   }
 
-  // Flush remaining
   if (inSystem) flushSystem();
   else flushProse();
 
@@ -128,15 +138,16 @@ function parseFrontmatter(markdown) {
 // ─── FETCH HELPERS ────────────────────────────────────────────────────────────
 
 async function fetchChaptersIndex() {
-  const res = await fetch('chapters.json');
-  if (!res.ok) throw new Error('Could not load chapters.json');
+  const url = BASE_URL + 'chapters.json';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load chapters.json (${res.status})`);
   return res.json();
 }
 
 async function fetchChapter(file) {
-  const base = window.location.pathname.replace(/\/reader\.html.*$/, '/');
-  const res = await fetch(base + file);
-  if (!res.ok) throw new Error(`Could not load ${file}`);
+  const url = BASE_URL + file;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load ${file} (${res.status} — fetched: ${url})`);
   return res.text();
 }
 
@@ -152,7 +163,7 @@ async function loadArchive() {
   try {
     chapters = await fetchChaptersIndex();
   } catch (e) {
-    list.innerHTML = `<li style="font-family:var(--font-mono);color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">[ ERROR: ARCHIVE UNAVAILABLE ]</li>`;
+    list.innerHTML = `<li style="font-family:var(--font-mono);color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">[ ERROR: ARCHIVE UNAVAILABLE — ${e.message} ]</li>`;
     return;
   }
 
@@ -189,7 +200,6 @@ async function loadReader() {
 
   if (!bodyEl) return;
 
-  // Get requested ID from URL
   const params = new URLSearchParams(window.location.search);
   const requestedId = params.get('id');
 
@@ -197,11 +207,10 @@ async function loadReader() {
   try {
     chapters = await fetchChaptersIndex();
   } catch (e) {
-    bodyEl.innerHTML = `<p style="font-family:var(--font-mono);color:var(--text-muted);">[ ERROR: ARCHIVE UNAVAILABLE ]</p>`;
+    bodyEl.innerHTML = `<p style="font-family:var(--font-mono);color:var(--text-muted);">[ ERROR: ARCHIVE UNAVAILABLE — ${escapeHtml(e.message)} ]</p>`;
     return;
   }
 
-  // Find chapter index
   const idx = requestedId
     ? chapters.findIndex(ch => ch.id === requestedId)
     : 0;
@@ -214,13 +223,10 @@ async function loadReader() {
     return;
   }
 
-  // Update page title
   document.title = `SYD / SIGNAL — ${chapter.id}: ${chapter.title}`;
 
-  // Render header meta
   if (titleEl) {
     titleEl.innerHTML = escapeHtml(chapter.title) + '<span class="cursor" aria-hidden="true"></span>';
-    // Remove cursor after brief delay once loaded
     setTimeout(() => {
       const cursor = titleEl.querySelector('.cursor');
       if (cursor) cursor.remove();
@@ -230,7 +236,6 @@ async function loadReader() {
   if (metaId) metaId.textContent = chapter.id;
   if (metaDate) metaDate.textContent = chapter.date;
 
-  // Fetch and render chapter
   let markdown;
   try {
     markdown = await fetchChapter(chapter.file);
@@ -241,25 +246,21 @@ async function loadReader() {
 
   const html = renderMarkdown(markdown);
 
-  // Progressive reveal: brief delay before rendering
   await new Promise(r => setTimeout(r, 400));
 
   bodyEl.classList.add('rendering');
   bodyEl.innerHTML = html;
 
-  // Stagger content elements for progressive feel
   const elements = bodyEl.querySelectorAll('p, .system-block, hr');
   elements.forEach((el, i) => {
     el.style.animationDelay = `${i * 80}ms`;
   });
 
-  // Remove rendering class after animations complete
   setTimeout(() => {
     bodyEl.classList.remove('rendering');
     elements.forEach(el => el.style.animationDelay = '');
   }, elements.length * 80 + 600);
 
-  // Navigation
   const hasPrev = chapterIndex > 0;
   const hasNext = chapterIndex < chapters.length - 1;
 
