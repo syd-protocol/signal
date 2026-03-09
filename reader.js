@@ -134,7 +134,8 @@ async function fetchChaptersIndex() {
 }
 
 async function fetchChapter(file) {
-  const res = await fetch(file);
+  const base = window.location.pathname.replace(/\/reader\.html.*$/, '/');
+  const res = await fetch(base + file);
   if (!res.ok) throw new Error(`Could not load ${file}`);
   return res.text();
 }
