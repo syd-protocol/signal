@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYD / SIGNAL — TRANSMISSION READER</title>
+  <meta name="description" content="Reading transmission. SYD Signal — serialised transmissions from the future.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="shell">
+
+    <!-- READER HEADER -->
+    <header class="reader-header">
+      <nav class="reader-nav-top">
+        <a href="index.html">[ RETURN TO ARCHIVE ]</a>
+      </nav>
+
+      <div id="reader-meta" class="reader-meta hidden">
+        <span class="reader-id" id="meta-id"></span>
+        <span class="reader-date" id="meta-date"></span>
+      </div>
+      <h1 class="reader-title" id="reader-title">
+        <span class="cursor" aria-hidden="true"></span>
+      </h1>
+    </header>
+
+    <!-- CHAPTER BODY -->
+    <main id="chapter-body" class="chapter-body" aria-live="polite">
+      <div class="loading-indicator">
+        [ RECEIVING TRANSMISSION ]<span class="cursor"></span>
+      </div>
+    </main>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="reader-nav-bottom" id="reader-nav-bottom" aria-label="Chapter navigation">
+      <button class="nav-btn" id="btn-prev" disabled>[ PREV TRANSMISSION ]</button>
+      <a href="index.html" class="nav-btn">[ ARCHIVE ]</a>
+      <button class="nav-btn" id="btn-next" disabled>[ NEXT TRANSMISSION ]</button>
+    </nav>
+
+  </div>
+
+  <script src="reader.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      loadReader();
+    });
+  </script>
+
+</body>
+</html>

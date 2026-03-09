@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYD / SIGNAL — TRANSMISSION ARCHIVE</title>
+  <meta name="description" content="Transmission archive. A serialised signal from the future.">
+  <meta property="og:title" content="SYD / SIGNAL">
+  <meta property="og:description" content="Transmission archive. The system is real.">
+  <meta property="og:type" content="website">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="shell">
+
+    <!-- HEADER / BOOT SEQUENCE -->
+    <header class="terminal-header">
+      <div class="brand">SYD — SYNCHRONIZED YIELD DIRECTIVE / SIGNAL</div>
+      <div class="boot-sequence" aria-live="polite">
+        <span class="boot-line">[ SIGNAL ESTABLISHED ]</span>
+        <span class="boot-line">[ ARCHIVE ACCESS GRANTED ]</span>
+        <span class="boot-line">[ LOADING TRANSMISSION LOG... ]</span>
+        <span class="boot-line">[ <span id="entry-count">—</span> TRANSMISSIONS RECOVERED ]<span class="cursor" aria-hidden="true"></span></span>
+      </div>
+    </header>
+
+    <!-- TRANSMISSION LOG -->
+    <main class="log-section">
+      <div class="log-label">// TRANSMISSION LOG</div>
+      <ul class="transmission-list" id="transmission-list" aria-label="Transmission archive">
+        <!-- Populated by reader.js -->
+        <li class="transmission-entry">
+          <span class="loading-indicator">[ LOADING ]<span class="cursor"></span></span>
+        </li>
+      </ul>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="terminal-footer">
+      <div class="footer-text">
+        <div>SYD / SIGNAL — SERIALISED TRANSMISSIONS</div>
+        <div>SYSTEM TERMINAL: <a href="https://syd-protocol.github.io/terminal" target="_blank" rel="noopener">syd-protocol.github.io/terminal</a></div>
+        <br>
+        <div>[ THE SYSTEM DESCRIBED IS REAL. THE OPERATOR CHOICE IS YOURS. ]</div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="reader.js"></script>
+  <script>
+    // Boot the archive on this page
+    window.addEventListener('DOMContentLoaded', () => {
+      loadArchive();
+    });
+  </script>
+
+</body>
+</html>
