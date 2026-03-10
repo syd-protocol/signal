@@ -4,5 +4,59 @@
     "title": "First Contact",
     "date": "2031.03.14",
     "file": "chapters/T-001.md"
+  },
+  {
+    "id": "T-002",
+    "title": "First Execution",
+    "date": "2031.03.15",
+    "file": "chapters/T-002.md"
+  },
+  {
+    "id": "T-003",
+    "title": "The Behavioural Trace",
+    "date": "2031.03.21",
+    "file": "chapters/T-003.md"
+  },
+  {
+    "id": "T-004",
+    "title": "Charisma Directive",
+    "date": "2031.03.25",
+    "file": "chapters/T-004.md"
+  },
+  {
+    "id": "T-005",
+    "title": "World Signal",
+    "date": "2031.03.28",
+    "file": "chapters/T-005.md"
+  },
+  {
+    "id": "T-006",
+    "title": "First Incursion",
+    "date": "2031.04.01",
+    "file": "chapters/T-006.md"
+  },
+  {
+    "id": "T-007",
+    "title": "The World Boss",
+    "date": "2031.04.04",
+    "file": "chapters/T-007.md"
+  },
+  {
+    "id": "T-008",
+    "title": "The Narrative Entity",
+    "date": "2031.04.10",
+    "file": "chapters/T-008.md"
+  },
+  {
+    "id": "T-009",
+    "title": "Corrupted State",
+    "date": "2031.04.14",
+    "file": "chapters/T-009.md"
+  },
+  {
+    "id": "T-010",
+    "title": "Recommit",
+    "date": "2031.04.15",
+    "file": "chapters/T-010.md"
   }
 ]
