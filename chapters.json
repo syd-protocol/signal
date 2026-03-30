@@ -58,5 +58,65 @@
     "title": "Recommit",
     "date": "2031.04.15",
     "file": "chapters/T-010.md"
+  },
+  {
+    "id": "T-011",
+    "title": "The Sixth Vector",
+    "date": "2031.04.16",
+    "file": "chapters/T-011.md"
+  },
+  {
+    "id": "T-012",
+    "title": "The Audit Continues",
+    "date": "2031.04.17",
+    "file": "chapters/T-012.md"
+  },
+  {
+    "id": "T-013",
+    "title": "First Leverage Execution",
+    "date": "2031.04.19",
+    "file": "chapters/T-013.md"
+  },
+  {
+    "id": "T-014",
+    "title": "The Rank Pressure",
+    "date": "2031.04.21",
+    "file": "chapters/T-014.md"
+  },
+  {
+    "id": "T-015",
+    "title": "World Signal II",
+    "date": "2031.04.23",
+    "file": "chapters/T-015.md"
+  },
+  {
+    "id": "T-016",
+    "title": "The Threshold Condition",
+    "date": "2031.04.25",
+    "file": "chapters/T-016.md"
+  },
+  {
+    "id": "T-017",
+    "title": "Second Incursion",
+    "date": "2031.04.27",
+    "file": "chapters/T-017.md"
+  },
+  {
+    "id": "T-018",
+    "title": "The Incursion Runs",
+    "date": "2031.04.30",
+    "file": "chapters/T-018.md"
+  },
+  {
+    "id": "T-019",
+    "title": "Incursion Resolved",
+    "date": "2031.05.01",
+    "file": "chapters/T-019.md"
+  },
+  {
+    "id": "T-020",
+    "title": "Rank Transition: E",
+    "date": "2031.05.02",
+    "file": "chapters/T-020.md"
   }
 ]

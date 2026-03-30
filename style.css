@@ -543,3 +543,17 @@ hr {
 }
 
 .hidden { display: none !important; }
+/* ─── CAROUSEL MODE OVERRIDES (mobile) ──────────────────────────────────── */
+/* These supplement the dynamically injected carousel CSS in reader.js      */
+
+@media (max-width: 600px) {
+  body.carousel-mode {
+    overflow: hidden !important;
+  }
+  body.carousel-mode .chapter-body {
+    display: none !important;
+  }
+  body.carousel-mode #reader-nav-bottom {
+    display: none !important;
+  }
+}
