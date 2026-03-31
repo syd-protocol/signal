@@ -285,15 +285,18 @@ function buildCarousel(slides, chapter, chapterIndex, chapters) {
       /* ── TRACK WRAPPER: clips the sliding track ── */
       #syd-carousel .car-track-wrap {
         flex: 1;
-        min-height: 0;      /* CRITICAL — flex items don't shrink below content without this */
-        overflow: hidden;   /* Clips slides that are off-screen */
-        position: relative;
+        min-height: 0;
+        overflow: hidden;
+        position: relative;  /* anchor for absolutely-positioned track */
       }
 
-      /* ── TRACK: slides laid out horizontally ── */
+      /* ── TRACK: absolutely fills the wrapper ── */
+      /* height:100% on a flex child is unreliable on mobile Safari/Chrome.  */
+      /* position:absolute with inset:0 is the only cross-browser guarantee. */
       #syd-carousel .car-track {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
         display: flex;
-        height: 100%;       /* Fill the track-wrap height */
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         will-change: transform;
       }
