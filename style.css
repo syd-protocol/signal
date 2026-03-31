@@ -557,3 +557,17 @@ hr {
     display: none !important;
   }
 }
+
+/* ─── CAROUSEL MODE OVERRIDES ────────────────────────────────────────────────
+   Applied when body.carousel-mode is set by reader.js on mobile.
+   Not scoped to a media query — the JS decides when carousel mode activates.  */
+
+body.carousel-mode {
+  overflow: hidden !important;
+}
+body.carousel-mode .chapter-body {
+  display: none !important;
+}
+body.carousel-mode #reader-nav-bottom {
+  display: none !important;
+}

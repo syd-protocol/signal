@@ -1,8 +1,16 @@
 /**
- * SYD / SIGNAL — reader.js
- * Handles both the archive index (index.html) and the chapter reader (reader.html).
- * Mobile: swipe-native carousel mode (IG-style, one slide at a time).
- * Desktop: original scroll reader.
+ * SYD / SIGNAL — reader.js v3
+ * Archive index (index.html) + chapter reader (reader.html)
+ *
+ * Mobile  → full-screen fixed overlay carousel (IG-style swipe)
+ * Desktop → original scroll reader (unchanged)
+ *
+ * KEY ARCHITECTURE DECISION:
+ * The carousel is a position:fixed overlay appended directly to <body>.
+ * It does NOT live inside .shell. This completely avoids the shell's
+ * max-width, flex, and height constraints that broke v1 and v2.
+ * The overlay top is set by JS to sit exactly below the reader-header.
+ *
  * No framework. No build step.
  */
 
@@ -12,120 +20,29 @@ const BASE_URL = (() => {
   for (let i = 0; i < scripts.length; i++) {
     const src = scripts[i].src;
     if (src && src.includes('reader.js')) {
-      return src.replace('reader.js', '');
+      const base = src.replace('reader.js', '');
+      console.log('[SYD] BASE_URL (script tag):', base);
+      return base;
     }
   }
-  return window.location.href.replace(/\/[^/]*(\?.*)?$/, '/');
+  const fallback = window.location.href.replace(/\/[^/]*(\?.*)?$/, '/');
+  console.log('[SYD] BASE_URL (fallback):', fallback);
+  return fallback;
 })();
 
+
 // ─── DEVICE DETECTION ─────────────────────────────────────────────────────────
-const IS_MOBILE = window.innerWidth <= 600 || ('ontouchstart' in window);
+// Use pointer:coarse (true touch device) OR narrow viewport.
+// 'ontouchstart' alone is unreliable — desktop Chrome devtools sets it.
+const IS_MOBILE = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+console.log('[SYD] IS_MOBILE:', IS_MOBILE,
+  '| innerWidth:', window.innerWidth,
+  '| pointer:coarse:', window.matchMedia('(pointer: coarse)').matches);
 
 
-// ─── MARKDOWN RENDERER ────────────────────────────────────────────────────────
-
-/**
- * Full render: returns both HTML string (for desktop) and
- * an array of slide objects (for mobile carousel).
- *
- * Slide types:
- *   { type: 'system', lines: [...] }
- *   { type: 'prose',  html: '...' }
- *   { type: 'hr' }
- *   { type: 'cta',    html: '...' }
- */
-function parseChapter(markdown) {
-  const body = markdown.replace(/^---[\s\S]*?---\n/, '').trim();
-  const lines = body.split('\n');
-
-  const slides = [];     // for mobile carousel
-  const htmlOut = [];    // for desktop scroll
-
-  let inSystem = false;
-  let systemBuffer = [];
-  let proseBuffer = [];
-
-  function flushProse() {
-    if (!proseBuffer.length) return;
-    const text = proseBuffer.join('\n').trim();
-    proseBuffer = [];
-    if (!text) return;
-
-    const paras = text.split(/\n{2,}/);
-    const slideParas = [];
-
-    paras.forEach(para => {
-      const t = para.trim();
-      if (!t) return;
-      if (t === '---') {
-        htmlOut.push('<hr>');
-        slides.push({ type: 'hr' });
-      } else if (t.startsWith('*The system') || t.startsWith('*The System')) {
-        const inner = t.replace(/^\*/, '').replace(/\*$/, '');
-        const ctaHtml = `<p class="chapter-cta">${escapeHtml(inner).replace(
-          'syd-protocol.github.io/terminal',
-          '<a href="https://syd-protocol.github.io/terminal" target="_blank" rel="noopener">syd-protocol.github.io/terminal</a>'
-        )}</p>`;
-        htmlOut.push(ctaHtml);
-        slides.push({ type: 'cta', html: ctaHtml });
-      } else {
-        const pHtml = `<p>${escapeHtml(t).replace(/\n/g, '<br>')}</p>`;
-        htmlOut.push(pHtml);
-        slideParas.push(pHtml);
-      }
-    });
-
-    // Group prose paras into slides of ~3 paragraphs each
-    if (slideParas.length) {
-      const PARAS_PER_SLIDE = 3;
-      for (let i = 0; i < slideParas.length; i += PARAS_PER_SLIDE) {
-        const chunk = slideParas.slice(i, i + PARAS_PER_SLIDE).join('');
-        slides.push({ type: 'prose', html: chunk });
-      }
-    }
-  }
-
-  function flushSystem() {
-    if (!systemBuffer.length) return;
-    const content = systemBuffer.join('\n').trim();
-    systemBuffer = [];
-    const sysLines = content.split('\n').map(l => l.trim()).filter(l => l);
-    const inner = sysLines.map(l => `<p>${escapeHtml(l)}</p>`).join('');
-    const blockHtml = `<div class="system-block">${inner}</div>`;
-    htmlOut.push(blockHtml);
-
-    // Each system block = one slide (split into sub-slides if many lines)
-    const LINES_PER_SYS_SLIDE = 12;
-    for (let i = 0; i < sysLines.length; i += LINES_PER_SYS_SLIDE) {
-      slides.push({ type: 'system', lines: sysLines.slice(i, i + LINES_PER_SYS_SLIDE) });
-    }
-  }
-
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim() === ':::system') {
-      flushProse();
-      inSystem = true;
-      i++; continue;
-    }
-    if (line.trim() === ':::' && inSystem) {
-      flushSystem();
-      inSystem = false;
-      i++; continue;
-    }
-    if (inSystem) systemBuffer.push(line);
-    else proseBuffer.push(line);
-    i++;
-  }
-
-  if (inSystem) flushSystem(); else flushProse();
-
-  return { html: htmlOut.join('\n'), slides };
-}
-
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
-  return str
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -134,7 +51,97 @@ function escapeHtml(str) {
 }
 
 
-// ─── FRONTMATTER PARSER ───────────────────────────────────────────────────────
+// ─── MARKDOWN PARSER ──────────────────────────────────────────────────────────
+// Returns { html, slides }
+// html   → desktop scroll reader
+// slides → array of { type: 'system'|'prose'|'cta'|'hr', ... }
+function parseChapter(markdown) {
+  console.log('[SYD] parseChapter: raw length', markdown.length);
+
+  // Strip YAML frontmatter (---\n...\n---)
+  const body = markdown.replace(/^---[\s\S]*?---\n?/, '').trim();
+  console.log('[SYD] parseChapter: body length', body.length);
+
+  const lines     = body.split('\n');
+  const slides    = [];
+  const htmlParts = [];
+
+  let inSystem  = false;
+  let sysBuf    = [];
+  let proseBuf  = [];
+
+  function flushProse() {
+    if (!proseBuf.length) return;
+    const raw = proseBuf.join('\n').trim();
+    proseBuf = [];
+    if (!raw) return;
+
+    const slideParas = [];
+
+    raw.split(/\n{2,}/).forEach(para => {
+      const t = para.trim();
+      if (!t) return;
+
+      if (t === '---') {
+        htmlParts.push('<hr>');
+        slides.push({ type: 'hr' });
+        return;
+      }
+
+      if (t.startsWith('*The system') || t.startsWith('*The System')) {
+        const inner = t.replace(/^\*/, '').replace(/\*$/, '');
+        const h = `<p class="chapter-cta">${escapeHtml(inner).replace(
+          'syd-protocol.github.io/terminal',
+          '<a href="https://syd-protocol.github.io/terminal" target="_blank" rel="noopener">syd-protocol.github.io/terminal</a>'
+        )}</p>`;
+        htmlParts.push(h);
+        slides.push({ type: 'cta', html: h });
+        return;
+      }
+
+      const h = `<p>${escapeHtml(t).replace(/\n/g, '<br>')}</p>`;
+      htmlParts.push(h);
+      slideParas.push(h);
+    });
+
+    // Group prose into slides of 3 paragraphs each
+    for (let i = 0; i < slideParas.length; i += 3) {
+      slides.push({ type: 'prose', html: slideParas.slice(i, i + 3).join('') });
+    }
+  }
+
+  function flushSystem() {
+    if (!sysBuf.length) return;
+    const raw      = sysBuf.join('\n').trim();
+    sysBuf = [];
+    const sysLines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const inner    = sysLines.map(l => `<p>${escapeHtml(l)}</p>`).join('');
+    htmlParts.push(`<div class="system-block">${inner}</div>`);
+
+    // Split large system blocks into sub-slides of 10 lines each
+    for (let i = 0; i < sysLines.length; i += 10) {
+      slides.push({ type: 'system', lines: sysLines.slice(i, i + 10) });
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === ':::system') { flushProse();  inSystem = true;  continue; }
+    if (line.trim() === ':::'  && inSystem) { flushSystem(); inSystem = false; continue; }
+    inSystem ? sysBuf.push(line) : proseBuf.push(line);
+  }
+  inSystem ? flushSystem() : flushProse();
+
+  console.log('[SYD] parseChapter: done — slides:', slides.length);
+  slides.forEach((s, i) =>
+    console.log(`[SYD]   slide[${i}] type=${s.type}` + (s.type === 'system' ? ` lines=${s.lines.length}` : ''))
+  );
+
+  return { html: htmlParts.join('\n'), slides };
+}
+
+
+// ─── FRONTMATTER ──────────────────────────────────────────────────────────────
 function parseFrontmatter(markdown) {
   const match = markdown.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
@@ -147,39 +154,47 @@ function parseFrontmatter(markdown) {
 }
 
 
-// ─── FETCH HELPERS ────────────────────────────────────────────────────────────
+// ─── FETCH ────────────────────────────────────────────────────────────────────
 async function fetchChaptersIndex() {
   const url = BASE_URL + 'chapters.json';
+  console.log('[SYD] fetch chapters.json:', url);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load chapters.json (${res.status})`);
-  return res.json();
+  if (!res.ok) throw new Error(`chapters.json ${res.status}`);
+  const data = await res.json();
+  console.log('[SYD] chapters loaded:', data.length);
+  return data;
 }
 
 async function fetchChapter(file) {
   const url = BASE_URL + file;
+  console.log('[SYD] fetch chapter:', url);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load ${file} (${res.status} — fetched: ${url})`);
-  return res.text();
+  if (!res.ok) throw new Error(`${file} → ${res.status} (${url})`);
+  const text = await res.text();
+  console.log('[SYD] chapter loaded, chars:', text.length);
+  return text;
 }
 
 
-// ─── ARCHIVE (index.html) ─────────────────────────────────────────────────────
+// ─── ARCHIVE PAGE ─────────────────────────────────────────────────────────────
 async function loadArchive() {
-  const list = document.getElementById('transmission-list');
+  console.log('[SYD] loadArchive: start');
+  const list    = document.getElementById('transmission-list');
   const countEl = document.getElementById('entry-count');
-  if (!list) return;
+  if (!list) { console.warn('[SYD] #transmission-list not found'); return; }
 
   let chapters;
   try {
     chapters = await fetchChaptersIndex();
   } catch (e) {
+    console.error('[SYD] loadArchive error:', e);
     list.innerHTML = `<li style="font-family:var(--font-mono);color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">[ ERROR: ARCHIVE UNAVAILABLE — ${e.message} ]</li>`;
     return;
   }
 
   if (countEl) countEl.textContent = chapters.length;
-
   list.innerHTML = '';
+
   chapters.forEach((ch, idx) => {
     const li = document.createElement('li');
     li.className = 'transmission-entry';
@@ -189,414 +204,397 @@ async function loadArchive() {
         <span class="entry-id">${escapeHtml(ch.id)}</span>
         <span class="entry-title">${escapeHtml(ch.title)}</span>
         <span class="entry-date">${escapeHtml(ch.date)}</span>
-      </a>
-    `;
+      </a>`;
     list.appendChild(li);
   });
+
+  console.log('[SYD] loadArchive: rendered', chapters.length, 'entries');
 }
 
 
-// ─── MOBILE CAROUSEL RENDERER ─────────────────────────────────────────────────
+// ─── MOBILE CAROUSEL ──────────────────────────────────────────────────────────
+function buildCarousel(slides, chapter, chapterIndex, chapters) {
+  console.log('[SYD] buildCarousel: start | chapter:', chapter.id, '| slides:', slides.length);
 
-function buildCarousel(slides, chapter, chapterIndex, chapters, bodyEl, titleEl, metaEl, metaId, metaDate) {
-  // Inject carousel CSS into document if not already there
-  if (!document.getElementById('carousel-style')) {
+  // ── 1. Inject CSS (once per page load) ────────────────────────────────────
+  if (!document.getElementById('syd-carousel-css')) {
     const style = document.createElement('style');
-    style.id = 'carousel-style';
+    style.id = 'syd-carousel-css';
     style.textContent = `
-      /* ── CAROUSEL SHELL ── */
-      body.carousel-mode {
-        overflow: hidden;
-        height: 100vh;
-        height: 100dvh;
-      }
-      body.carousel-mode .shell {
-        max-width: 100%;
-        padding: 0;
-        height: 100vh;
-        height: 100dvh;
-        display: flex;
-        flex-direction: column;
-      }
+      /* Lock body scroll while carousel is open */
+      body.carousel-mode { overflow: hidden !important; }
+
+      /* Hide the desktop chapter body and original bottom nav */
+      body.carousel-mode .chapter-body      { display: none !important; }
+      body.carousel-mode #reader-nav-bottom { display: none !important; }
+
+      /* Compact the reader-header that stays visible above the overlay */
       body.carousel-mode .reader-header {
-        padding: 1.2rem 1.5rem 0.8rem;
-        border-bottom: 1px solid var(--navy-border);
-        flex-shrink: 0;
+        padding: 0.75rem 1.2rem 0.6rem !important;
       }
       body.carousel-mode .reader-nav-top {
-        margin-bottom: 0.5rem;
-        font-size: 0.65rem;
-      }
-      body.carousel-mode .reader-meta {
         margin-bottom: 0.25rem;
+        font-size: 0.6rem;
       }
-      body.carousel-mode .reader-title {
-        font-size: 1rem;
-        line-height: 1.3;
-      }
+      body.carousel-mode .reader-meta   { margin-bottom: 0.15rem; }
+      body.carousel-mode .reader-title  { font-size: 0.85rem; line-height: 1.25; }
+      body.carousel-mode .reader-title .cursor { display: none; }
 
-      /* ── SLIDE VIEWPORT ── */
-      .carousel-viewport {
-        flex: 1;
-        overflow: hidden;
-        position: relative;
+      /* ── OVERLAY (fixed, below header, above everything) ── */
+      #syd-carousel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        /* top is set by JS */
+        z-index: 500;
+        background: var(--navy);
         display: flex;
         flex-direction: column;
       }
 
-      /* ── PROGRESS BAR ── */
-      .carousel-progress {
+      /* Progress pips */
+      #syd-carousel .car-pips {
         display: flex;
         gap: 3px;
-        padding: 0.6rem 1.5rem 0.5rem;
+        padding: 0.5rem 1.1rem 0.4rem;
         flex-shrink: 0;
+        border-bottom: 1px solid var(--navy-border);
       }
-      .carousel-pip {
+      #syd-carousel .car-pip {
         flex: 1;
         height: 2px;
-        background: var(--navy-border);
         border-radius: 1px;
-        transition: background 0.3s ease;
+        background: var(--navy-border);
+        transition: background 0.25s;
       }
-      .carousel-pip.active {
-        background: var(--cyan);
-      }
-      .carousel-pip.done {
-        background: var(--cyan-dim);
+      #syd-carousel .car-pip.done   { background: var(--cyan-dim); }
+      #syd-carousel .car-pip.active { background: var(--cyan); }
+
+      /* Slide counter */
+      #syd-carousel .car-counter {
+        font-family: var(--font-mono);
+        font-size: 0.55rem;
+        color: var(--text-muted);
+        letter-spacing: 0.18em;
+        text-align: center;
+        padding: 0.25rem 0 0.2rem;
+        flex-shrink: 0;
       }
 
-      /* ── SLIDE TRACK ── */
-      .carousel-track {
+      /* ── TRACK WRAPPER: clips the sliding track ── */
+      #syd-carousel .car-track-wrap {
         flex: 1;
-        display: flex;
-        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-        will-change: transform;
-        overflow: hidden;
+        min-height: 0;      /* CRITICAL — flex items don't shrink below content without this */
+        overflow: hidden;   /* Clips slides that are off-screen */
+        position: relative;
       }
-      .carousel-slide {
+
+      /* ── TRACK: slides laid out horizontally ── */
+      #syd-carousel .car-track {
+        display: flex;
+        height: 100%;       /* Fill the track-wrap height */
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        will-change: transform;
+      }
+
+      /* ── INDIVIDUAL SLIDE ── */
+      #syd-carousel .car-slide {
         min-width: 100%;
         width: 100%;
-        padding: 1rem 1.5rem 1rem;
+        height: 100%;
+        box-sizing: border-box;
+        padding: 1.1rem 1.3rem 1rem;
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         display: flex;
         flex-direction: column;
-        justify-content: flex-start;
-        box-sizing: border-box;
       }
 
-      /* System slide styling */
-      .carousel-slide.type-system {
-        justify-content: center;
-      }
-      .carousel-slide.type-system .system-block {
+      /* Title slide */
+      #syd-carousel .car-slide.s-title { justify-content: center; }
+      .car-title-id   { font-family: var(--font-mono); font-size: 0.65rem; color: var(--cyan-dim); letter-spacing: 0.18em; display: block; margin-bottom: 0.4rem; }
+      .car-title-date { font-family: var(--font-mono); font-size: 0.6rem;  color: var(--text-muted); letter-spacing: 0.1em;  display: block; margin-bottom: 1.2rem; }
+      .car-title-h    { font-family: var(--font-mono); font-size: 1.15rem; color: var(--cyan); line-height: 1.3; font-weight: 400; letter-spacing: 0.04em; }
+      .car-title-hint { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-muted); letter-spacing: 0.2em; margin-top: 2.2rem; opacity: 0.45; }
+
+      /* System slide */
+      #syd-carousel .car-slide.s-system { justify-content: center; }
+      #syd-carousel .car-slide.s-system .system-block {
         margin: 0;
         width: 100%;
+        padding: 1.1rem 1.2rem;
       }
-      .carousel-slide.type-system .system-block p {
-        font-size: 0.8rem;
-        line-height: 1.8;
-      }
-
-      /* Prose slide styling */
-      .carousel-slide.type-prose p {
-        font-size: 0.95rem;
+      #syd-carousel .car-slide.s-system .system-block p {
+        font-size: 0.76rem;
         line-height: 1.85;
-        margin-bottom: 1.2rem;
-      }
-      .carousel-slide.type-prose p:last-child {
-        margin-bottom: 0;
+        margin-bottom: 0.35rem;
       }
 
-      /* HR slide */
-      .carousel-slide.type-hr {
-        justify-content: center;
-        align-items: center;
+      /* Prose slide */
+      #syd-carousel .car-slide.s-prose p {
+        font-family: var(--font-body);
+        font-size: 0.93rem;
+        line-height: 1.85;
+        color: var(--text-primary);
+        font-weight: 300;
+        margin-bottom: 1.1rem;
       }
-      .carousel-slide.type-hr hr {
-        width: 100%;
-      }
+      #syd-carousel .car-slide.s-prose p:last-child { margin-bottom: 0; }
 
       /* CTA slide */
-      .carousel-slide.type-cta {
+      #syd-carousel .car-slide.s-cta {
         justify-content: flex-end;
-        padding-bottom: 2rem;
+        padding-bottom: 1.2rem;
       }
-      .carousel-slide.type-cta .chapter-cta {
+      #syd-carousel .car-slide.s-cta .chapter-cta {
         border-top: 1px solid var(--navy-border);
-        padding-top: 1.5rem;
+        padding-top: 1.2rem;
         margin-top: 0;
       }
 
-      /* ── SWIPE HIT ZONES ── */
-      .carousel-swipe-left,
-      .carousel-swipe-right {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 40%;
-        z-index: 10;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .carousel-swipe-left  { left: 0; }
-      .carousel-swipe-right { right: 0; }
-
-      /* ── BOTTOM NAV (CAROUSEL MODE) ── */
-      body.carousel-mode .reader-nav-bottom {
-        padding: 0.7rem 1.5rem 0.9rem;
-        gap: 0.5rem;
+      /* ── CHAPTER NAV (prev chapter / archive / next chapter) ── */
+      #syd-carousel .car-chapter-nav {
+        display: flex;
+        gap: 0.4rem;
+        padding: 0.5rem 1.1rem 0.65rem;
         flex-shrink: 0;
+        border-top: 1px solid var(--navy-border);
       }
-      body.carousel-mode .nav-btn {
-        font-size: 0.62rem;
-        padding: 0.5rem 0.6rem;
+      #syd-carousel .car-chapter-nav .nav-btn {
         flex: 1;
+        font-size: 0.58rem;
+        padding: 0.45rem 0.35rem;
         text-align: center;
-      }
-
-      /* ── SLIDE COUNTER ── */
-      .carousel-counter {
-        font-family: var(--font-mono);
-        font-size: 0.6rem;
-        color: var(--text-muted);
-        letter-spacing: 0.15em;
-        text-align: center;
-        padding: 0 1.5rem 0.3rem;
-        flex-shrink: 0;
-      }
-
-      /* ── CHAPTER TITLE SLIDE (first slide) ── */
-      .carousel-slide.type-title {
-        justify-content: center;
-        align-items: flex-start;
-      }
-      .carousel-title-id {
-        font-family: var(--font-mono);
-        font-size: 0.7rem;
-        color: var(--cyan-dim);
-        letter-spacing: 0.15em;
-        margin-bottom: 0.5rem;
         display: block;
-      }
-      .carousel-title-date {
-        font-family: var(--font-mono);
-        font-size: 0.65rem;
-        color: var(--text-muted);
-        letter-spacing: 0.1em;
-        margin-bottom: 1.5rem;
-        display: block;
-      }
-      .carousel-title-text {
-        font-family: var(--font-mono);
-        font-size: 1.3rem;
-        color: var(--cyan);
-        line-height: 1.3;
-        letter-spacing: 0.04em;
-      }
-      .carousel-title-hint {
-        font-family: var(--font-mono);
-        font-size: 0.6rem;
-        color: var(--text-muted);
-        letter-spacing: 0.12em;
-        margin-top: 3rem;
-        opacity: 0.6;
       }
     `;
     document.head.appendChild(style);
+    console.log('[SYD] buildCarousel: CSS injected');
   }
 
-  // Activate carousel mode on body
+  // Lock body scroll
   document.body.classList.add('carousel-mode');
 
-  // Hide the regular chapter body — we're replacing it
-  bodyEl.style.display = 'none';
-  if (document.getElementById('reader-nav-bottom')) {
-    document.getElementById('reader-nav-bottom').style.display = 'none';
-  }
-
-  // Build full slide list: prepend a title slide
+  // ── 2. Build slide list (prepend title slide, drop HR slides) ─────────────
   const titleSlide = {
     type: 'title',
-    id: chapter.id,
-    date: chapter.date,
+    id:    chapter.id,
+    date:  chapter.date,
     title: chapter.title
   };
+  const allSlides = [titleSlide, ...slides.filter(s => s.type !== 'hr')];
+  console.log('[SYD] buildCarousel: allSlides:', allSlides.length);
 
-  // Filter out pure HR slides (they don't work well as full slides on mobile)
-  const filteredSlides = slides.filter(s => s.type !== 'hr');
-  const allSlides = [titleSlide, ...filteredSlides];
+  let current = 0;
 
-  let currentSlide = 0;
+  // ── 3. Create overlay element ─────────────────────────────────────────────
+  const overlay = document.createElement('div');
+  overlay.id = 'syd-carousel';
 
-  // Build carousel HTML
-  const carouselContainer = document.createElement('div');
-  carouselContainer.className = 'carousel-viewport';
-  carouselContainer.setAttribute('aria-label', 'Chapter reader carousel');
-
-  // Progress bar
-  const progress = document.createElement('div');
-  progress.className = 'carousel-progress';
-  allSlides.forEach((_, i) => {
+  // Progress pips
+  const pipsBar = document.createElement('div');
+  pipsBar.className = 'car-pips';
+  allSlides.forEach(() => {
     const pip = document.createElement('div');
-    pip.className = 'carousel-pip' + (i === 0 ? ' active' : '');
-    pip.dataset.idx = i;
-    progress.appendChild(pip);
+    pip.className = 'car-pip';
+    pipsBar.appendChild(pip);
   });
-  carouselContainer.appendChild(progress);
+  overlay.appendChild(pipsBar);
 
   // Counter
   const counter = document.createElement('div');
-  counter.className = 'carousel-counter';
-  counter.textContent = `1 / ${allSlides.length}`;
-  carouselContainer.appendChild(counter);
+  counter.className = 'car-counter';
+  overlay.appendChild(counter);
 
-  // Track
+  // Track wrapper
+  const trackWrap = document.createElement('div');
+  trackWrap.className = 'car-track-wrap';
+
   const track = document.createElement('div');
-  track.className = 'carousel-track';
+  track.className = 'car-track';
 
+  // Build slides
   allSlides.forEach((slide, i) => {
     const el = document.createElement('div');
-    el.className = `carousel-slide type-${slide.type}`;
+    el.className = `car-slide s-${slide.type}`;
     el.setAttribute('aria-hidden', i !== 0 ? 'true' : 'false');
+    el.dataset.slideIdx = i;
 
-    if (slide.type === 'title') {
-      el.innerHTML = `
-        <span class="carousel-title-id">[ ${escapeHtml(slide.id)} ]</span>
-        <span class="carousel-title-date">${escapeHtml(slide.date)}</span>
-        <div class="carousel-title-text">${escapeHtml(slide.title)}</div>
-        <div class="carousel-title-hint">SWIPE TO BEGIN</div>
-      `;
-    } else if (slide.type === 'system') {
-      const inner = slide.lines.map(l => `<p>${escapeHtml(l)}</p>`).join('');
-      el.innerHTML = `<div class="system-block">${inner}</div>`;
-    } else if (slide.type === 'prose') {
-      el.innerHTML = slide.html;
-    } else if (slide.type === 'cta') {
-      el.innerHTML = slide.html;
+    switch (slide.type) {
+      case 'title':
+        el.innerHTML = `
+          <span class="car-title-id">[ ${escapeHtml(slide.id)} ]</span>
+          <span class="car-title-date">${escapeHtml(slide.date)}</span>
+          <div class="car-title-h">${escapeHtml(slide.title)}</div>
+          <div class="car-title-hint">SWIPE TO READ →</div>`;
+        break;
+      case 'system':
+        el.innerHTML = `<div class="system-block">${
+          slide.lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')
+        }</div>`;
+        break;
+      case 'prose':
+        el.innerHTML = slide.html;
+        break;
+      case 'cta':
+        el.innerHTML = slide.html;
+        break;
     }
 
     track.appendChild(el);
+    console.log(`[SYD] buildCarousel: built slide[${i}] type=${slide.type}`);
   });
 
-  carouselContainer.appendChild(track);
+  trackWrap.appendChild(track);
+  overlay.appendChild(trackWrap);
 
-  // Swipe zones (tap left = prev, tap right = next)
-  const zoneLeft  = document.createElement('div');
-  const zoneRight = document.createElement('div');
-  zoneLeft.className  = 'carousel-swipe-left';
-  zoneRight.className = 'carousel-swipe-right';
-  carouselContainer.appendChild(zoneLeft);
-  carouselContainer.appendChild(zoneRight);
-
-  // Insert carousel before the nav bottom
-  const navBottom = document.getElementById('reader-nav-bottom');
-  bodyEl.parentNode.insertBefore(carouselContainer, navBottom || bodyEl.nextSibling);
-
-  // Re-show bottom nav for chapter prev/next (not slide nav)
-  const chapterNav = document.createElement('nav');
-  chapterNav.className = 'reader-nav-bottom';
-  chapterNav.setAttribute('aria-label', 'Chapter navigation');
-
+  // Chapter nav bar
   const hasPrev = chapterIndex > 0;
   const hasNext = chapterIndex < chapters.length - 1;
 
-  const btnPrev = document.createElement('button');
-  btnPrev.className = 'nav-btn';
-  btnPrev.textContent = '[ ← PREV ]';
-  btnPrev.disabled = !hasPrev;
-  if (hasPrev) btnPrev.addEventListener('click', () => {
+  const chNav = document.createElement('div');
+  chNav.className = 'car-chapter-nav';
+
+  const bPrev = document.createElement('button');
+  bPrev.className = 'nav-btn';
+  bPrev.textContent = '[ ← ]';
+  bPrev.disabled = !hasPrev;
+  if (hasPrev) bPrev.addEventListener('click', () => {
+    console.log('[SYD] nav: prev chapter');
     window.location.href = `reader.html?id=${encodeURIComponent(chapters[chapterIndex - 1].id)}`;
   });
 
-  const btnArchive = document.createElement('a');
-  btnArchive.className = 'nav-btn';
-  btnArchive.href = 'index.html';
-  btnArchive.textContent = '[ ARCHIVE ]';
+  const bArch = document.createElement('a');
+  bArch.className = 'nav-btn';
+  bArch.href = 'index.html';
+  bArch.textContent = '[ ARCHIVE ]';
 
-  const btnNext = document.createElement('button');
-  btnNext.className = 'nav-btn';
-  btnNext.textContent = '[ NEXT → ]';
-  btnNext.disabled = !hasNext;
-  if (hasNext) btnNext.addEventListener('click', () => {
+  const bNext = document.createElement('button');
+  bNext.className = 'nav-btn';
+  bNext.textContent = '[ → ]';
+  bNext.disabled = !hasNext;
+  if (hasNext) bNext.addEventListener('click', () => {
+    console.log('[SYD] nav: next chapter');
     window.location.href = `reader.html?id=${encodeURIComponent(chapters[chapterIndex + 1].id)}`;
   });
 
-  chapterNav.appendChild(btnPrev);
-  chapterNav.appendChild(btnArchive);
-  chapterNav.appendChild(btnNext);
+  chNav.appendChild(bPrev);
+  chNav.appendChild(bArch);
+  chNav.appendChild(bNext);
+  overlay.appendChild(chNav);
 
-  bodyEl.parentNode.insertBefore(chapterNav, null);
-  bodyEl.parentNode.appendChild(chapterNav);
+  // ── 4. Mount overlay to <body> (NOT inside .shell) ────────────────────────
+  document.body.appendChild(overlay);
+  console.log('[SYD] buildCarousel: overlay mounted to <body>');
 
-  // ── NAVIGATION LOGIC ──────────────────────────────────────────────────────
-
-  function goTo(idx) {
-    if (idx < 0 || idx >= allSlides.length) return;
-
-    // Update track position
-    track.style.transform = `translateX(-${idx * 100}%)`;
-
-    // Update aria-hidden
-    track.querySelectorAll('.carousel-slide').forEach((el, i) => {
-      el.setAttribute('aria-hidden', i !== idx ? 'true' : 'false');
-    });
-
-    // Update progress pips
-    progress.querySelectorAll('.carousel-pip').forEach((pip, i) => {
-      pip.className = 'carousel-pip' + (i < idx ? ' done' : i === idx ? ' active' : '');
-    });
-
-    // Update counter
-    counter.textContent = `${idx + 1} / ${allSlides.length}`;
-
-    currentSlide = idx;
+  // ── 5. Position overlay below the reader-header ───────────────────────────
+  function positionOverlay() {
+    const header = document.querySelector('.reader-header');
+    const topPx  = header
+      ? Math.round(header.getBoundingClientRect().bottom)
+      : 0;
+    overlay.style.top = topPx + 'px';
+    console.log('[SYD] positionOverlay: top=', topPx,
+      '| overlay h=', window.innerHeight - topPx);
   }
 
-  // Tap zones
-  zoneRight.addEventListener('click', () => goTo(currentSlide + 1));
-  zoneLeft.addEventListener('click',  () => goTo(currentSlide - 1));
+  // Run immediately, and again once fonts/layout settle
+  positionOverlay();
+  requestAnimationFrame(positionOverlay);
+  window.addEventListener('resize', positionOverlay);
 
-  // Touch swipe
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let isSwiping = false;
+  // ── 6. goTo() — the single function that drives all navigation ────────────
+  const pips = Array.from(pipsBar.querySelectorAll('.car-pip'));
+  const slideEls = Array.from(track.querySelectorAll('.car-slide'));
 
-  carouselContainer.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    isSwiping = false;
+  function goTo(idx) {
+    if (idx < 0 || idx >= allSlides.length) {
+      console.log('[SYD] goTo: out of bounds', idx);
+      return;
+    }
+    console.log('[SYD] goTo:', idx, '/', allSlides.length - 1,
+      '| type:', allSlides[idx].type);
+
+    // Translate the track
+    track.style.transform = `translateX(-${idx * 100}%)`;
+
+    // Aria hidden
+    slideEls.forEach((el, i) =>
+      el.setAttribute('aria-hidden', i !== idx ? 'true' : 'false')
+    );
+
+    // Pips
+    pips.forEach((pip, i) => {
+      pip.className = 'car-pip' +
+        (i < idx ? ' done' : i === idx ? ' active' : '');
+    });
+
+    // Counter
+    counter.textContent = `${idx + 1} / ${allSlides.length}`;
+
+    current = idx;
+  }
+
+  // ── 7. Input: touch swipe ─────────────────────────────────────────────────
+  let tx0 = 0, ty0 = 0, didSwipe = false;
+
+  overlay.addEventListener('touchstart', e => {
+    tx0 = e.touches[0].clientX;
+    ty0 = e.touches[0].clientY;
+    didSwipe = false;
+    console.log('[SYD] touchstart x:', tx0.toFixed(1));
   }, { passive: true });
 
-  carouselContainer.addEventListener('touchmove', e => {
-    const dx = e.touches[0].clientX - touchStartX;
-    const dy = e.touches[0].clientY - touchStartY;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
-      isSwiping = true;
+  overlay.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - tx0;
+    const dy = e.touches[0].clientY - ty0;
+    // Only flag as horizontal swipe if clearly more horizontal than vertical
+    if (!didSwipe && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
+      didSwipe = true;
     }
   }, { passive: true });
 
-  carouselContainer.addEventListener('touchend', e => {
-    if (!isSwiping) return;
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 40) {
-      if (dx < 0) goTo(currentSlide + 1); // swipe left = next
-      else         goTo(currentSlide - 1); // swipe right = prev
+  overlay.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tx0;
+    console.log('[SYD] touchend dx:', dx.toFixed(1), 'didSwipe:', didSwipe);
+    if (didSwipe && Math.abs(dx) > 45) {
+      dx < 0 ? goTo(current + 1) : goTo(current - 1);
     }
-    isSwiping = false;
+    didSwipe = false;
   }, { passive: true });
 
-  // Keyboard arrows
-  document.addEventListener('keydown', e => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(currentSlide + 1);
-    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(currentSlide - 1);
+  // ── 8. Input: tap (left 40% = prev, right 60% = next) ────────────────────
+  overlay.addEventListener('click', e => {
+    // Ignore taps on the chapter nav bar
+    if (e.target.closest('.car-chapter-nav')) return;
+    const ratio = e.clientX / overlay.offsetWidth;
+    console.log('[SYD] tap ratio:', ratio.toFixed(2), '| current:', current);
+    ratio >= 0.4 ? goTo(current + 1) : goTo(current - 1);
   });
 
-  // Initial render
+  // ── 9. Input: keyboard ────────────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      goTo(current + 1);
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goTo(current - 1);
+    }
+  });
+
+  // ── 10. Initial render ────────────────────────────────────────────────────
   goTo(0);
+  console.log('[SYD] buildCarousel: complete ✓');
 }
 
 
-// ─── READER (reader.html) ─────────────────────────────────────────────────────
+// ─── READER PAGE (reader.html) ────────────────────────────────────────────────
 async function loadReader() {
+  console.log('[SYD] loadReader: start | IS_MOBILE:', IS_MOBILE);
+
   const bodyEl   = document.getElementById('chapter-body');
   const titleEl  = document.getElementById('reader-title');
   const metaEl   = document.getElementById('reader-meta');
@@ -605,15 +603,20 @@ async function loadReader() {
   const btnPrev  = document.getElementById('btn-prev');
   const btnNext  = document.getElementById('btn-next');
 
-  if (!bodyEl) return;
+  if (!bodyEl) {
+    console.error('[SYD] #chapter-body element not found');
+    return;
+  }
 
   const params      = new URLSearchParams(window.location.search);
   const requestedId = params.get('id');
+  console.log('[SYD] loadReader: requestedId =', requestedId);
 
   let chapters;
   try {
     chapters = await fetchChaptersIndex();
   } catch (e) {
+    console.error('[SYD] chapters index fetch failed:', e);
     bodyEl.innerHTML = `<p style="font-family:var(--font-mono);color:var(--text-muted);">[ ERROR: ARCHIVE UNAVAILABLE — ${escapeHtml(e.message)} ]</p>`;
     return;
   }
@@ -621,8 +624,10 @@ async function loadReader() {
   const idx          = requestedId ? chapters.findIndex(ch => ch.id === requestedId) : 0;
   const chapterIndex = idx >= 0 ? idx : 0;
   const chapter      = chapters[chapterIndex];
+  console.log('[SYD] loadReader: chapterIndex =', chapterIndex, '| chapter =', chapter?.id);
 
   if (!chapter) {
+    console.error('[SYD] chapter not found:', requestedId);
     bodyEl.innerHTML = `<p style="font-family:var(--font-mono);color:var(--text-muted);">[ TRANSMISSION NOT FOUND ]</p>`;
     return;
   }
@@ -631,7 +636,10 @@ async function loadReader() {
 
   if (titleEl) {
     titleEl.innerHTML = escapeHtml(chapter.title) + '<span class="cursor" aria-hidden="true"></span>';
-    setTimeout(() => { const c = titleEl.querySelector('.cursor'); if (c) c.remove(); }, 2000);
+    setTimeout(() => {
+      const c = titleEl.querySelector('.cursor');
+      if (c) c.remove();
+    }, 2000);
   }
   if (metaEl)   metaEl.classList.remove('hidden');
   if (metaId)   metaId.textContent   = chapter.id;
@@ -641,28 +649,33 @@ async function loadReader() {
   try {
     markdown = await fetchChapter(chapter.file);
   } catch (e) {
+    console.error('[SYD] chapter markdown fetch failed:', e);
     bodyEl.innerHTML = `<p style="font-family:var(--font-mono);color:var(--text-muted);">[ ERROR: TRANSMISSION CORRUPTED — ${escapeHtml(e.message)} ]</p>`;
     return;
   }
 
   const { html, slides } = parseChapter(markdown);
+  console.log('[SYD] loadReader: html =', html.length, 'chars | slides =', slides.length);
 
-  await new Promise(r => setTimeout(r, 400));
+  // Brief pause — the "receiving transmission" feel
+  await new Promise(r => setTimeout(r, 350));
 
-  // ── MOBILE: carousel mode ─────────────────────────────────────────────────
+  // ── MOBILE → carousel ─────────────────────────────────────────────────────
   if (IS_MOBILE) {
-    bodyEl.innerHTML = ''; // clear loading indicator
-    buildCarousel(slides, chapter, chapterIndex, chapters, bodyEl, titleEl, metaEl, metaId, metaDate);
+    console.log('[SYD] loadReader: → MOBILE carousel mode');
+    bodyEl.innerHTML = ''; // clear "receiving" loading state
+    buildCarousel(slides, chapter, chapterIndex, chapters);
     return;
   }
 
-  // ── DESKTOP: scroll reader (original behaviour) ───────────────────────────
+  // ── DESKTOP → scroll reader ───────────────────────────────────────────────
+  console.log('[SYD] loadReader: → DESKTOP scroll mode');
   bodyEl.classList.add('rendering');
   bodyEl.innerHTML = html;
 
   const elements = bodyEl.querySelectorAll('p, .system-block, hr');
+  console.log('[SYD] loadReader: desktop — animating', elements.length, 'elements');
   elements.forEach((el, i) => { el.style.animationDelay = `${i * 80}ms`; });
-
   setTimeout(() => {
     bodyEl.classList.remove('rendering');
     elements.forEach(el => { el.style.animationDelay = ''; });
@@ -682,4 +695,6 @@ async function loadReader() {
       window.location.href = `reader.html?id=${encodeURIComponent(chapters[chapterIndex + 1].id)}`;
     });
   }
+
+  console.log('[SYD] loadReader: desktop render complete ✓');
 }
