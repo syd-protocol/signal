@@ -28,6 +28,21 @@
     <!-- TRANSMISSION LOG -->
     <main class="log-section">
       <div class="log-label">// TRANSMISSION LOG</div>
+
+      <!-- FILTER -->
+      <div class="filter-wrap">
+        <input
+          type="text"
+          id="chapter-filter"
+          class="filter-input"
+          placeholder="[ FILTER TRANSMISSIONS ]"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Filter transmissions"
+        >
+        <span class="filter-count" id="filter-count"></span>
+      </div>
+
       <ul class="transmission-list" id="transmission-list" aria-label="Transmission archive">
         <!-- Populated by reader.js -->
         <li class="transmission-entry">

@@ -209,6 +209,42 @@ async function loadArchive() {
   });
 
   console.log('[SYD] loadArchive: rendered', chapters.length, 'entries');
+
+  // ── Live filter ───────────────────────────────────────────────────────────
+  const filterInput = document.getElementById('chapter-filter');
+  const filterCount = document.getElementById('filter-count');
+
+  function updateFilter() {
+    const q = filterInput.value.trim().toLowerCase();
+    const entries = list.querySelectorAll('.transmission-entry');
+    let visible = 0;
+
+    entries.forEach(entry => {
+      const text = entry.textContent.toLowerCase();
+      const match = !q || text.includes(q);
+      entry.classList.toggle('filtered-out', !match);
+      if (match) visible++;
+    });
+
+    // Show count only when filtering
+    if (q) {
+      filterCount.textContent = `${visible} / ${chapters.length}`;
+    } else {
+      filterCount.textContent = '';
+    }
+  }
+
+  if (filterInput) {
+    filterInput.addEventListener('input', updateFilter);
+    // Clear filter on Escape
+    filterInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        filterInput.value = '';
+        updateFilter();
+        filterInput.blur();
+      }
+    });
+  }
 }
 
 
@@ -314,14 +350,62 @@ function buildCarousel(slides, chapter, chapterIndex, chapters) {
         flex-direction: column;
       }
 
-      /* Title slide */
-      #syd-carousel .car-slide.s-title { justify-content: center; }
-      .car-title-id   { font-family: var(--font-mono); font-size: 0.65rem; color: var(--cyan-dim); letter-spacing: 0.18em; display: block; margin-bottom: 0.4rem; }
-      .car-title-date { font-family: var(--font-mono); font-size: 0.6rem;  color: var(--text-muted); letter-spacing: 0.1em;  display: block; margin-bottom: 1.2rem; }
-      .car-title-h    { font-family: var(--font-mono); font-size: 1.15rem; color: var(--cyan); line-height: 1.3; font-weight: 400; letter-spacing: 0.04em; }
-      .car-title-hint { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-muted); letter-spacing: 0.2em; margin-top: 2.2rem; opacity: 0.45; }
+      /* ── TITLE SLIDE ── */
+      #syd-carousel .car-slide.s-title {
+        justify-content: center;
+        /* Radial glow from centre — gives the title slide visual weight */
+        background:
+          radial-gradient(ellipse 70% 50% at 30% 50%,
+            rgba(79,195,247,0.06) 0%, transparent 70%),
+          var(--navy);
+      }
+      .car-title-id   {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        color: var(--cyan-dim);
+        letter-spacing: 0.18em;
+        display: block;
+        margin-bottom: 0.4rem;
+      }
+      .car-title-date {
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        letter-spacing: 0.1em;
+        display: block;
+        margin-bottom: 1.2rem;
+      }
+      .car-title-h {
+        font-family: var(--font-mono);
+        font-size: 1.15rem;
+        color: var(--cyan);
+        line-height: 1.3;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+      }
+      /* Swipe hint — animated bounce arrow, impossible to miss */
+      .car-title-hint {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-top: 2.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.58rem;
+        color: var(--cyan-dim);
+        letter-spacing: 0.18em;
+      }
+      .car-title-hint-arrow {
+        display: inline-block;
+        font-size: 1rem;
+        color: var(--cyan);
+        animation: hintBounce 1.4s ease-in-out infinite;
+      }
+      @keyframes hintBounce {
+        0%, 100% { transform: translateX(0);    opacity: 1; }
+        50%       { transform: translateX(6px);  opacity: 0.6; }
+      }
 
-      /* System slide */
+      /* ── SYSTEM SLIDE ── */
       #syd-carousel .car-slide.s-system { justify-content: center; }
       #syd-carousel .car-slide.s-system .system-block {
         margin: 0;
@@ -334,18 +418,49 @@ function buildCarousel(slides, chapter, chapterIndex, chapters) {
         margin-bottom: 0.35rem;
       }
 
-      /* Prose slide */
+      /* ── PROSE SLIDE ── */
+      #syd-carousel .car-slide.s-prose {
+        /* Transmission surface: dark with a breath of signal from the left */
+        background:
+          linear-gradient(
+            105deg,
+            rgba(79,195,247,0.04) 0%,
+            transparent 45%
+          ),
+          var(--navy);
+        /* Left accent line — editorial, like a broadsheet column rule */
+        border-left: 1px solid rgba(79,195,247,0.12);
+        padding-left: 1.4rem;
+        padding-right: 1.5rem;
+        position: relative;
+      }
+      /* Faint top edge signal line */
+      #syd-carousel .car-slide.s-prose::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          rgba(79,195,247,0.2) 0%,
+          transparent 60%
+        );
+        pointer-events: none;
+      }
       #syd-carousel .car-slide.s-prose p {
         font-family: var(--font-body);
-        font-size: 0.93rem;
-        line-height: 1.85;
-        color: var(--text-primary);
+        font-size: 1rem;
+        line-height: 1.9;
+        /* Warm off-white — readable without being stark */
+        color: #c9cbd8;
         font-weight: 300;
-        margin-bottom: 1.1rem;
+        margin-bottom: 1.15rem;
+        /* Slight tracking for readability at this size */
+        letter-spacing: 0.01em;
       }
       #syd-carousel .car-slide.s-prose p:last-child { margin-bottom: 0; }
 
-      /* CTA slide */
+      /* ── CTA SLIDE ── */
       #syd-carousel .car-slide.s-cta {
         justify-content: flex-end;
         padding-bottom: 1.2rem;
@@ -430,7 +545,10 @@ function buildCarousel(slides, chapter, chapterIndex, chapters) {
           <span class="car-title-id">[ ${escapeHtml(slide.id)} ]</span>
           <span class="car-title-date">${escapeHtml(slide.date)}</span>
           <div class="car-title-h">${escapeHtml(slide.title)}</div>
-          <div class="car-title-hint">SWIPE TO READ →</div>`;
+          <div class="car-title-hint">
+            <span class="car-title-hint-arrow">→</span>
+            <span>SWIPE TO READ</span>
+          </div>`;
         break;
       case 'system':
         el.innerHTML = `<div class="system-block">${
